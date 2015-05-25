@@ -1,29 +1,70 @@
-__author__ = 'Caro'
+__author__ = 'CaroB'
 
 from PyQt4 import QtGui
 import sys
 from bs4 import BeautifulSoup
 import time
+import pytz
+import datetime
 
 """
+    MAIN WINDOW
+    * Main GUI
+    * Contains Widget and Core
+"""
 
-    GUI PART
+class MainWindow(QtGui.QMainWindow):
 
+    def __init__(self, app):
+        super(MainWindow, self).__init__()
+
+        self.setWindowTitle('SV Calendar Maker')
+        self.setMaximumSize(400, 150)
+        self.setMinimumSize(250, 150)
+
+
+        self._app = app
+
+        self.main_widget = MainWidget(self, app)
+        self.setCentralWidget(self.main_widget)
+
+"""
+    MAIN WIDGET
+    * GUI Part
+    * Pick Time zone
+    * Load SVPlanning HTML page
+    * Save as iCalendar
 """
 class MainWidget(QtGui.QWidget):
 
     def __init__(self, parent, app):
         super(MainWidget, self).__init__(parent)
 
+        # Core linking
         self._app = app
 
+        #
+        # GUI with PyQt
+        #
+
         self.main_v_layout = QtGui.QVBoxLayout(self)
+
+        # Time Zones
+        self.h_layout_5 = QtGui.QHBoxLayout()
+        self.combobox_timezones = QtGui.QComboBox()
+        self.combobox_timezones.addItem("-- Select Destination Time Zone --")
+        for zone in pytz.common_timezones:
+            self.combobox_timezones.addItem(zone)
+
+        self.combobox_timezones.currentIndexChanged['QString'].connect(self.tzChanged)
+
+        self.h_layout_5.addWidget(self.combobox_timezones)
 
         # Open File
         self.h_layout_1 = QtGui.QHBoxLayout()
         self.line_edit_filename = QtGui.QLineEdit()
         self.line_edit_filename.setReadOnly(True)
-        self.open_button = QtGui.QPushButton('Open')
+        self.open_button = QtGui.QPushButton("Open")
         self.open_button.clicked.connect(self.open)
 
         self.h_layout_1.addWidget(self.line_edit_filename)
@@ -60,12 +101,16 @@ class MainWidget(QtGui.QWidget):
         self.h_layout_4.addWidget(self.close_button)
 
         # Layout
+        self.main_v_layout.addLayout(self.h_layout_5)
         self.main_v_layout.addLayout(self.h_layout_1)
         self.main_v_layout.addLayout(self.h_layout_3)
         self.main_v_layout.addLayout(self.h_layout_2)
         self.main_v_layout.addItem(spacerItem2)
         self.main_v_layout.addLayout(self.h_layout_4)
 
+    """
+        Open SVPlanning HTML page
+    """
     def open(self):
         filename = self._app.filename()
         filename = QtGui.QFileDialog.getOpenFileName(self, 'Open File', filename or '',
@@ -83,6 +128,9 @@ class MainWidget(QtGui.QWidget):
         if self._app.shifts():
             self._app.makeCalendar(self._app.shifts())
 
+    """
+        Save SVPlanning loaded as iCalendar
+    """
     def saveAs(self):
         filename = self._app.filename()
 
@@ -99,6 +147,9 @@ class MainWidget(QtGui.QWidget):
             self.label_info.setText("Nothing to save")
             print "Nothing to save"
 
+    """
+        Explanations how this soft works
+    """
     def howTo(self):
         MESSAGE = "<p>1 - Go to your SV schedule on the website :</p>" \
                 "<p>\tLog into your account at " \
@@ -113,30 +164,46 @@ class MainWidget(QtGui.QWidget):
 
         reply = QtGui.QMessageBox.information(self, "How To Use the SV CALENDAR MAKER", MESSAGE)
 
+    """
+        Set selected Timezone to the Core
+    """
+    def tzChanged(self, str):
+        if str == "-- Select Destination Time Zone --":
+            str = "UTC"
+        self._app.setTimezone(str)
+
+    """
+        Close SVCalendarMaker
+    """
     def close(self):
         print "Goodbye!"
         self.parent().close()
 
-class MainWindow(QtGui.QMainWindow):
 
-    def __init__(self, app):
-        super(MainWindow, self).__init__()
-
-        self.setWindowTitle('SV Calendar Maker')
-        self.setMaximumSize(400, 150)
-        self.setMinimumSize(250, 150)
-
-
-        self._app = app
-
-        self.main_widget = MainWidget(self, app)
-        self.setCentralWidget(self.main_widget)
 
 
 """
 
-        APP PART
+    CORE
+    * Shift = 1 event in SVPlanning
+    * Parser = read info from HTML page
+    * Writer = translate HTML info to iCalendar info
+    * App = holds all info
 
+"""
+
+"""
+    SHIFT
+    * Contains all following info
+        * data
+        * number of shift
+        * location
+        * starting date and time
+        * ending date and time
+        * duration of shift
+        * title of shift - what you're supposed to do
+        * additional info and description of task
+        * if you can swap this shift with someone else
 """
 class Shift(object):
     def __init__(self, date=None, shift_nb=None):
@@ -203,6 +270,9 @@ class Shift(object):
     def swappable(self):
         return self._swappable
 
+    def setSwappable(self, swappable):
+        self._swappable = swappable
+
     def to_print(self):
         print "SHIFT " + str(self.shiftNb())
         print self.date()
@@ -215,9 +285,11 @@ class Shift(object):
         print self.swappable()
         print "_______"
 
-    def setSwappable(self, swappable):
-        self._swappable = swappable
-
+"""
+    PARSER
+    * Reads info from HTML page using beautifulsoup library
+    * Stores each shift from SVPlanning in a Shift object
+"""
 class Parser(object):
     def __init__(self):
         super(Parser, self).__init__()
@@ -306,12 +378,22 @@ class Parser(object):
 
         self._shifts = shifts
 
+"""
+    WRITER
+    * writes read Shifts from HTML to iCalendar
+"""
 class Writer(object):
-    def __init__(self):
+    def __init__(self, tz):
         super(Writer, self).__init__()
 
-        self._ics = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//CaroB.//SV Calendar Maker\n"
-        self._makeTimeZone()
+        self._timezone = tz
+        self._ics = ""
+
+    def timezone(self):
+        return self._timezone
+
+    def setTimezone(self, tz):
+        self._timezone = str(tz)
 
     def ics(self):
         return self._ics
@@ -319,27 +401,38 @@ class Writer(object):
     def setIcs(self, ics):
         self._ics = ics
 
+    def _initIcs(self):
+        self._ics = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//CaroB.//SV Calendar Maker\n"
+        self._makeTimeZone()
+
     def _makeTimeZone(self):
+        winter_offset = pytz.timezone(self._timezone).localize(datetime.datetime(1967,10,29)).strftime('%z')
+        winter_name = pytz.timezone(self._timezone).localize(datetime.datetime(1967,10,29)).tzname()
+        summer_offset = pytz.timezone(self._timezone).localize(datetime.datetime(1987,04,05)).strftime('%z')
+        summer_name = pytz.timezone(self._timezone).localize(datetime.datetime(1987,04,05)).tzname()
+
         self._ics += "BEGIN:VTIMEZONE\n"
-        self._ics += "TZID:America/Vancouver\n"
-        self._ics += "X-LIC-LOCATION:America/Vancouver\n"
+        self._ics += "TZID:" + self._timezone + "\n"
+        self._ics += "X-LIC-LOCATION:" + self._timezone + "\n"
         self._ics += "BEGIN:DAYLIGHT\n"
-        self._ics += "TZOFFSETFROM:-0800\n"
-        self._ics += "TZOFFSETTO:-0700\n"
-        self._ics += "TZNAME:PDT\n"
-        self._ics += "DTSTART:19700308T020000\n"
+        self._ics += "TZOFFSETFROM:" + winter_offset + "\n"
+        self._ics += "TZOFFSETTO:" + summer_offset + "\n"
+        self._ics += "TZNAME:" + summer_name + "\n"
+        self._ics += "DTSTART:19870405T020000\n"
         self._ics += "RRULE:FREQ=DAILY\n"
         self._ics += "END:DAYLIGHT\n"
         self._ics += "BEGIN:STANDARD\n"
-        self._ics += "TZOFFSETFROM:-0700\n"
-        self._ics += "TZOFFSETTO:-0800\n"
-        self._ics += "TZNAME:PST\n"
-        self._ics += "DTSTART:19701101T020000\n"
+        self._ics += "TZOFFSETFROM:" + summer_offset + "\n"
+        self._ics += "TZOFFSETTO:" + winter_offset + "\n"
+        self._ics += "TZNAME:" + winter_name + "\n"
+        self._ics += "DTSTART:19671029T020000\n"
         self._ics += "RRULE:FREQ=DAILY\n"
         self._ics += "END:STANDARD\n"
         self._ics += "END:VTIMEZONE\n"
 
     def makeCalendar(self, shifts):
+        self._initIcs()
+
         for shift in shifts:
             s = self.makeShift(shift)
             self._ics += s
@@ -364,8 +457,8 @@ class Writer(object):
         res = "BEGIN:VEVENT\nCATEGORIES:Shift\n"
         res += "DTSTAMP:" + self._makeStamp() + "\n"
         res += "UID:" + str(shift.shiftNb()) + "\n"
-        res += "DTSTART;TZID=America/Vancouver:" + self.makeDate(shift.date(), shift.start()) + "\n"
-        res += "DTEND;TZID=America/Vancouver:" + self.makeDate(shift.date(), shift.end()) + "\n"
+        res += "DTSTART;TZID=" + self._timezone + ":" + self.makeDate(shift.date(), shift.start()) + "\n"
+        res += "DTEND;TZID=" + self._timezone + ":" + self.makeDate(shift.date(), shift.end()) + "\n"
         res += "SUMMARY:" + str(shift.job()) + "\n"
         res += "LOCATION:" + str(shift.venue()) + "\n"
         res += "DESCRIPTION:Shift #" + str(shift.shiftNb()) + " | Swappable : " + str(shift.swappable())
@@ -419,18 +512,30 @@ class Writer(object):
             return "12"
 
     def writeCalendar(self, filename):
+        print "TZ " + self._timezone
         with open (filename, "w") as myfile:
             myfile.write(self._ics)
             myfile.close()
 
+"""
+    APP
+    * Main Core module
+    * holds Parser and Writer objects to load HTML page and transforms it as iCalendar
+"""
 class App(object):
     def __init__(self):
         super(App, self).__init__()
 
         self._parser = Parser()
-        self._writer = Writer()
+        self._writer = Writer("UTC")
 
         print "Welcome to SV Calendar Maker\n"
+
+    def timezone(self):
+        return self._writer.timezone()
+
+    def setTimezone(self, tz):
+        self._writer.setTimezone(tz)
 
     def filename(self):
         return self._parser.filename()
@@ -450,7 +555,7 @@ class App(object):
     def ics(self):
         return self._writer.ics()
 
-    def setics(self, i):
+    def setIcs(self, i):
         self._writer.setIcs(i)
 
     def makeCalendar(self, shifts):
@@ -459,6 +564,11 @@ class App(object):
     def writeCalendar(self, filename):
         self._writer.writeCalendar(filename)
 
+"""
+    MAIN FUNCTION
+    * Entry point
+    * Launches application
+"""
 def main():
     qt_app = QtGui.QApplication([])
 
