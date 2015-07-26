@@ -4,8 +4,9 @@
 As an [**ACM Siggraph**](http://www.siggraph.org/) [**Student Volunteer**](http://www.siggraphstudentvolunteers.com/), I had shifts to do that I can check online. In order to have my tasks calendar offline, I made this to convert the webpage in an iCalendar to load on my smartphone.
 
 ## How does it work?
-![SVCalendarMaker](https://github.com/By0ute/SVCalendarMaker/blob/master/img/SVCal.png)
+**Clic the picture for the video demo**
 
+[![SVCalendarMaker](https://github.com/By0ute/SVCalendarMaker/blob/master/img/SVCal.png)](https://vimeo.com/134546342)
 
 1. Go to your **SV schedule** on this [*website*](http://sis.siggraph.org/)
 2. Click on **Student Volunteer System**
